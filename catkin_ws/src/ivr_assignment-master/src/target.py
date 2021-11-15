@@ -8,8 +8,7 @@ import numpy as np
 from std_msgs.msg import Float64MultiArray, Float64
 
 
-def target_publisher():
-
+def target_publisher(): 
     # Defines publisher and subscriber
     # initialize the node named
     rospy.init_node('target_publisher', anonymous=True)

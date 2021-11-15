@@ -24,6 +24,17 @@ class image_converter:
     # initialize the bridge between openCV and ROS
     self.bridge = CvBridge()
 
+  def trajectory(self):
+    # get current time
+    cur_time = np.array([rospy.get_time() - self.time_trajectory])
+    x_d = float(5.5* np.cos(cur_time * np.pi/100))
+    y_d = float(5.5 + np.absolute(1.5* np.sin(cur_time * np.pi/100)))
+    return np.array([x_d, y_d])
+
+  def forward_kinematics(self,image):
+    joints = self.detect_joint_angles(image)
+    end_effector = np.array([3 * np.sin(joints[0]) + 3 * np.sin(joints[0]+joints[1]) + 3 *np.sin(joints.sum()), 3 * np.cos(joints[0]) + 3 * np.cos(joints[0]+joints[1]) + 3 * np.cos(joints.sum())])
+    return end_effector
 
   # Recieve data, process it, and publish
   def callback2(self,data):
