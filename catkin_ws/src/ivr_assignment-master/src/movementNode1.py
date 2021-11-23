@@ -43,7 +43,7 @@ class movementNode1:
 
 
 def main(args):
-    sc1 = movementNode1()
+    mn1 = movementNode1()
     try:
         rospy.spin()
     except KeyboardInterrupt:
