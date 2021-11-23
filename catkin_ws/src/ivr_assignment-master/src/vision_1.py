@@ -13,10 +13,13 @@ from std_msgs.msg import Float64MultiArray
 
 class vision_1:
     def __init__(self):
+        # initialize the node named vision_1
         rospy.init_node("vision_1", anonymous=True)
         # initialize the bridge between openCV and ROS
         self.bridge = CvBridge()
+        # initialize a subscriber to receive messages and use callback function to recieve data
         self.initialiseSubscribers()
+        # initialize a publisher to send messages to a topic named image_topic
         self.initialisePublishers()
         self.initaliseMessageObjects()
         self.initialiseBlobCentres()
@@ -47,7 +50,6 @@ class vision_1:
         self.vectorYBPub = rospy.Publisher("vector_yb", Float64MultiArray, queue_size=10)
         self.vectorYBtoBRPub = rospy.Publisher("vector_yb_br", Float64MultiArray, queue_size=10)
 
-    # required so very first callback doesn't fail
     def initialiseBlobCentres(self):
         self.greenC1 = np.array([])
         self.redC1 = np.array([])
