@@ -9,10 +9,10 @@ from std_msgs.msg import Float64MultiArray, Float64
 
 
 def target_publisher(): 
-    # Defines publisher and subscriber
-    # initialize the node named
+    # initialize the node named target_publisher
     rospy.init_node('target_publisher', anonymous=True)
     rate = rospy.Rate(50)  # 50hz
+    
     # initialize a publisher for end effector target positions
     target_pos_pub = rospy.Publisher("target_pos", Float64MultiArray, queue_size=10)
 
