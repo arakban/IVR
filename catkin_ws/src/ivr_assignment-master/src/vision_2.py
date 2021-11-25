@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
+import roslib
 import sys
-
+import rospy
 import cv2
 import numpy as np
-import rospy
-from cv_bridge import CvBridge, CvBridgeError
+from std_msgs.msg import String
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float64
-from std_msgs.msg import Float64MultiArray
-
+from std_msgs.msg import Float64MultiArray, Float64
+from cv_bridge import CvBridge, CvBridgeError
+import message_filters
+from numpy import sin,cos
+import math
 
 class vision_2:
     def __init__(self):
@@ -24,8 +26,10 @@ class vision_2:
         self.initialiseJointLookback()
 
     def initialiseSubscribers(self):
-        self.image_sub1 = rospy.Subscriber("/camera1/robot/image_raw", Image, self.callback1)
-        self.image_sub2 = rospy.Subscriber("/camera2/robot/image_raw", Image, self.callback2)
+        self.image_sub1 = message_filters.Subscriber("/camera1/robot/image_raw", Image)
+        self.image_sub2 = message_filters.Subscriber("/camera2/robot/image_raw", Image)
+        self.sync = message_filters.ApproximateTimeSynchronizer([self.image_sub1, self.image_sub2], 10, 1)
+        self.sync.registerCallback(self.callbackk)
 
     def initialisePublishers(self):
         self.joint1Pub = rospy.Publisher("joint_angle_1", Float64, queue_size=10)
@@ -188,31 +192,73 @@ class vision_2:
         self.updateLastJoint()
         self.publishangles()
         self.publishCentresAndVectors()
+    
+    def callbackk(self, data1, data2):
+        try:
+            self.cv_image1 = self.bridge.imgmsg_to_cv2(data1, "bgr8")
+            self.cv_image2 = self.bridge.imgmsg_to_cv2(data2, "bgr8")
+        except CvBridgeError as e:
+            print(e)
+
+        self.redC1, self.greenC1, self.blueC1, self.yellowC1 = self.findAllPoints(self.cv_image1)
+        self.redC2, self.greenC2, self.blueC2, self.yellowC2 = self.findAllPoints(self.cv_image2)
+        self.combinecenters()
+        self.setPixelsToMetersRatio()
+        self.determinejointangles()
+        self.updateLastJoint()
+        self.publishangles()
+        self.publishCentresAndVectors()
+        
+    def rotate_axis_z(self,theta,vec):
+            rotMat = np.array([[cos(theta),-sin(theta), 0], [sin(theta), cos(theta), 0], [0, 0, 1]])
+            return np.dot(rotMat,vec)
+
+    def rotate_axis_x(self,theta,vec):
+            rotMat =np.array([[1, 0, 0], [0, cos(theta), -sin(theta)], [0, sin(theta), cos(theta)]])
+            return np.dot(rotMat,vec)
+
+    def projection(self,vect1, vect2):
+        dot_prod = np.dot(vect1,vect2)
+        sqrt_length = self.length_of_vector(vect2) * self.length_of_vector(vect2)
+        amount_proj = dot_prod/sqrt_length
+        return amount_proj * vect2
+
+    def length_of_vector(self,vect):
+            squared_sum = np.sum(vect ** 2)
+            return np.sqrt(squared_sum)
 
     def determinejointangles(self):
         self.vectorYB = self.finalBlueCenter - self.finalYellowCenter
         self.vectorBR = self.finalRedCenter - self.finalBlueCenter
 
-        vecjoint1 = np.array([self.vectorYB[0], self.vectorYB[1]])  # y axis also appears to be flipped from camera perspective
-        vecjoint2 = np.array([-self.vectorYB[1], self.vectorYB[2]])  # y axis also appears to be flipped from camera perspective
-        vecjoint4 = np.array([-self.vectorBR[1], self.vectorBR[2]])
-        vecjoint3 = np.array([np.linalg.norm(self.vectorYB[:2]), self.vectorYB[2]])
-        yUnitVector = np.array([0, -1])  # z axis is flipped
-        zUnitVector = np.array([0, 1])  # z axis is flipped
+        joint_1 = np.arctan2(self.vectorYB[1],self.vectorYB[0])
+        if (joint_1 < 0):
+            joint_1 += 3*np.pi/2
+        else:
+            joint_1 -= 3*np.pi/2
+        #rotation around x
+        joint_3 = -(np.arctan2(self.vectorYB[2], self.vectorYB[1]) - np.pi/2)  
+        if joint_3 > (np.pi)/2 :
+            a = np.pi - joint_3
+            b = (np.pi)/2 - a
+            joint_3 = (np.pi)/2 - b
+        elif joint_3 < -(np.pi)/2 :
+            a = np.pi + joint_3
+            b = (np.pi)/2 - a
+            joint_3 = -(np.pi)/2 + b
+        else :
+            joint_3 = joint_3
 
-        self.joint1.data = self.angleBetweenVectors(yUnitVector, vecjoint1)
-
-        isSwitched = self.detectSwitch()
-        self.joint3.data = self.angleBetweenVectors2(zUnitVector, vecjoint3) * isSwitched
-        # print("Joint3:", self.joint3.data, vecjoint3[0], vecjoint3[1], str(self.vectorYB))
-
-        # self.joint4.data = self.angleBetweenVectors2(self.vectorYB, self.vectorBR)
-        vecjoint4 = self.reverseJoint1(self.reverseJoint3(self.vectorBR))[0:3:2]
-        self.joint4.data = self.angleBetweenVectors(zUnitVector, vecjoint4)
-
-        self.joint1.data = self.angleBound(self.joint1.data, np.pi, self.lastJoint1)
-        self.joint3.data = self.angleBound(self.joint3.data, np.pi / 2.0, self.lastJoint3)
-        self.joint4.data = self.angleBound(self.joint4.data, np.pi / 2.0, self.lastJoint4)
+        self.vectorYB = self.rotate_axis_x(-joint_3, self.vectorYB)
+        proj = self.projection(self.vectorBR, self.vectorYB)
+        if (self.length_of_vector(self.vectorBR + proj) >= self.length_of_vector(self.vectorBR)):
+            joint_4 = self.vector_angles(self.vectorBR, proj)
+        else :
+            joint_4 = np.pi /2 - self.vector_angles(self.vectorBR, proj)
+        
+        self.joint1.data = joint_1
+        self.joint3.data = joint_3
+        self.joint4.data = joint_4
 
     def detectSwitch(self):
         if (abs(self.joint1.data - self.lastJoint1) > 1.6) and (self.iterationNumber > 30):
@@ -231,12 +277,12 @@ class vision_2:
             jointAngle = lastAngle
         return jointAngle
 
-    def angleBetweenVectors(self, vectorFrom, vectorTo):
-        sign = np.sign(vectorTo[0])
-        return np.arctan2(np.linalg.norm(np.cross(vectorTo, vectorFrom)), np.dot(vectorFrom, vectorTo)) * sign
-
-    def angleBetweenVectors2(self, vectorFrom, vectorTo):
-        return np.arctan2(np.linalg.norm(np.cross(vectorTo, vectorFrom)), np.dot(vectorFrom, vectorTo))
+    def vector_angles(self,vect1,vect2):
+            dot_vect1_vect2 = np.dot(vect1,vect2)
+            length_vect1 = self.length_of_vector(vect1)
+            length_vect2 = self.length_of_vector(vect2)
+            return np.arccos(dot_vect1_vect2/(length_vect1 * length_vect2))
+            
 
     def combinecenters(self):
         self.originPoint = self.originhandler(self.greenC1, self.greenC2)
@@ -297,6 +343,7 @@ class vision_2:
                                   [0, np.cos(th), -np.sin(th)],
                                   [0, np.sin(th), np.cos(th)]])
         return reverseMatrix.dot(vectorBR.T)
+        
 
 # call the class
 def main(args):
