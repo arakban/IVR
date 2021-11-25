@@ -59,19 +59,45 @@ class image_converter:
     y_d = float(6 + np.absolute(1.5 * np.sin(cur_time * np.pi / 100)))
     return np.array([x_d, y_d])
 
-  def forward_kinematics(self,image):
+  # forward kinematics formuala, to get the 
+  def forward_kinematics(self):
     # get joint angles 
     j1, j2, j3, j4 = self.joint_angles
 
     # make calculations easier to read
-    s1, c1, s2, c2, c3, c4 = np.sin(j1), np.cos(j1), s2, np.cos(j2), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
+    s1, c1, s2, c2, c3, c4 = np.sin(j1), np.cos(j1), np.sin(j2), np.cos(j2), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
     
+    # calculate the effect of rotation on each componenet 
     x = 7.2 * c1 + 2.8 * (c1 * c3 - s1 * s2 * s3)
     y = 2.8 * (c * np.sin(j2) * s1 - s1 * c3) - 7.2 * s1
     z = -2.8 * c1 * s1 
     end_effector = np.array([x,y,z])
+    
     return end_effector
 
+  # calculate the Jacobian matrix to do inverse kinematics - get the relation between joint velocities & end-effector velocities of a robot manipulator
+  # i.e. how much each joint needs to move to get to the target position
+  def calc_jacobian(self):
+    j1, j2, j3, j4 = self.joint_angles
+    s1, c1, s2, c2, c3, c4 = np.sin(j1), np.cos(j1), np.sin(j2), np.cos(j2), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
+    
+    #initialise a empty matrix with dimensions 
+    jacob_matrix = np.zeroes(shape=(3,3))
+    
+    jacob_matrix[0,0] = -7.8 * s1 + 2.8*(s1 * c3) - (c1 * s2 * s3)      #R00
+    jacob_matrix[0,1] = 2.8 * (-s1 * c1 * s3)                           #R01
+    jacob_matrix[0,2] = 2.8 * ((-c1 * s3) - (s1 * s2 * c3))             #R02
+
+    jacob_matrix[1,0] = 2.8 * ((-c1 * s3) - (s1 * s2 * s3))             #R10
+    jacob_matrix[1,1] = 2.8 * (c1 * c2 * s3)                            #R11
+    jacob_matrix[1,2] = 2.8 * ((c1 * s2 * c3) + (s1 * s3))              #R12
+
+    jacob_matrix[2,0] = 0                                               #R20
+    jacob_matrix[2,1] = 2.8 * (s2 * s3)                                 #R21
+    jacob_matrix[2,2] = -2.8 * (c2 * c3)                                #R22
+
+    return jacob_matrix
+    
   # Recieve data from joint1 
   def callback_joint1(self,data):
     self.joints[0] = data.data
