@@ -8,7 +8,7 @@ import numpy as np
 import logging 
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64, Float64MultiArray
 from cv_bridge import CvBridge, CvBridgeError
 
 
@@ -43,14 +43,14 @@ class image_converter:
     self.target_sub = rospy.Subscriber("/target_pos", Float64MultiArray, self.callback_target)
 
     #end effector - we don't care about orientation
-    self.end_effector_pos = np.array([0.0, 0.0, 0], dtype='float64')
+    self.end_effector_pos = np.array([0.0, 0.0, 0.0], dtype='float64')
     self.end_effector_sub =  self.joint1_sub = rospy.Subscriber("red_centre", Float64MultiArray, self.callback_end_effector)
     # forward kinematics calculation publisher
     self.forward_kin_pub = rospy.Publisher("fk_end_effector", Float64MultiArray, queue_size=10)
     
     #error data and pub
-    self.error = np.array([0.0, 0.0, 0.0], dtype='float64')
-    self.error_d = np.array([0.0,0.0], dtype='float64')
+    self.error = np.array([0.0, 0.0, 0.0,0.0], dtype='float64')
+    self.error_d = np.array([0.0,0.0,0.0,0.0], dtype='float64')
     self.error_pub = rospy.Publisher("error", Float64MultiArray, queue_size=10)
 
     self.time_previous_step = np.array([rospy.get_time()], dtype='float64')
@@ -78,7 +78,7 @@ class image_converter:
     s1, c1, s2, c2, s3, c3, s4, c4 = np.sin(j1), np.cos(j1), np.sin(j2), np.cos(j2), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
     
     #initialise a empty matrix with dimensions 
-    jacob_matrix = np.zeroes(shape=(3,3))
+    jacob_matrix = np.zeros(shape=(3,3))
     
     jacob_matrix[0,0] = 2.8 * (s1 * s3 * c4) + 2.8 * (s1 * s3) - (c1 * s2 * s3)                        #RX1
     jacob_matrix[0,1] = 2.8 * (-s1 * c1 * s3)                                                          #RX3
@@ -102,7 +102,7 @@ class image_converter:
     self.time_previous_step = curr_time
   
     #(psuedo)inverse of Jacobian 
-    J_inv = np.linalg.pinv(self.calculate_jacobian())
+    J_inv = np.linalg.pinv(self.calc_jacobian())
 
     #get end-effector positon
     pos = self.end_effector_pos
@@ -127,20 +127,24 @@ class image_converter:
   # Recieve data from joint1 
   def callback_joint1(self,joints):
     #update 1st joint
-    self.joint_angles[0] = joints.data[0]
+    self.joint_angles[0] = joints.data
 
   def callback_joint3(self,joints):
     #update 2nd joint
-    self.joint_angles[2] = joints.data[2]
+    self.joint_angles[2] = joints.data
 
   def callback_joint4(self,joints):
     #update 4th joint 
-    self.joint_angles[3] = joints.data[3]
+    self.joint_angles[3] = joints.data
+
+    #calculate forward kinematics and publish
+    end_effector = self.forward_kinematics()
+    self.forward_kin_pub.publish(end_effector)
     
     #now calcualte new joint angles
     new_joint_angles  = self.control_open()
     
-    #publish new joing angles
+    #publish new joint angles
     self.joint1.data = new_joint_angles[0]
     self.joint2.data = new_joint_angles[1]
     self.joint3.data = new_joint_angles[2]
