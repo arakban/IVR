@@ -20,6 +20,8 @@ class vision_1:
         self.blueC1 = np.array([])
         self.yellowC1 = np.array([])
 
+        self.lim = np.pi / 2.0
+
         # initialize the bridge between openCV and ROS
         self.bridge = CvBridge()
 
@@ -36,86 +38,12 @@ class vision_1:
         self.greenCenterPub = rospy.Publisher("green_center", Float64MultiArray, queue_size=10)
         self.blueCenterPub = rospy.Publisher("blue_center", Float64MultiArray, queue_size=10)
         self.yellowCenterPub = rospy.Publisher("yellow_center", Float64MultiArray, queue_size=10)
-
-        self.relativeRedPub = rospy.Publisher("relative_red", Float64MultiArray, queue_size=10)
-        self.relativeBluePub = rospy.Publisher("relative_blue", Float64MultiArray, queue_size=10)
-        self.relativeYellowPub = rospy.Publisher("relative_yellow", Float64MultiArray, queue_size=10)
-
-        self.meterRedPub = rospy.Publisher("meter_red", Float64MultiArray, queue_size=10)
-        self.meterBluePub = rospy.Publisher("meter_blue", Float64MultiArray, queue_size=10)
-        self.meterYellowPub = rospy.Publisher("meter_yellow", Float64MultiArray, queue_size=10)
-
-        self.vectorYBPub = rospy.Publisher("vector_yb", Float64MultiArray, queue_size=10)
-        self.vectorYBtoBRPub = rospy.Publisher("vector_yb_br", Float64MultiArray, queue_size=10)
         
         self.joint2 = Float64(); self.joint3 = Float64(); self.joint4 = Float64()
 
-        self.redMsg = Float64MultiArray(); self.greenMsg = Float64MultiArray(); self.blueMsg = Float64MultiArray(); self.yellowMsg = Float64MultiArray()
-
-        self.relativeRedMSg = Float64MultiArray(); self.relativeBlueMSg = Float64MultiArray(); self.relativeYellowMSg = Float64MultiArray()
-
-        self.meterRedMsg = Float64MultiArray(); self.meterBlueMsg = Float64MultiArray(); self.meterYellowMsg = Float64MultiArray()
-
-        self.vectorYBMsg = Float64MultiArray(); self.vectorYBtoBRMSg = Float64MultiArray()
+        self.redDat = Float64MultiArray(); self.greenDat = Float64MultiArray(); self.blueDat = Float64MultiArray(); self.yellowDat = Float64MultiArray()
 
         self.iterationNumber = 0; self.lastJoint2 = 0.0; self.lastJoint3 = 0.0; self.lastJoint4 = 0.0
-
-    def publishInfo(self):
-        self.greenMsg.data = (self.originPoint / 500.0).tolist()
-        self.yellowMsg.data = (self.finalYellowCenter / 500.0).tolist()
-        self.blueMsg.data = (self.finalBlueCenter / 500.0).tolist()
-        self.redMsg.data = (self.finalRedCenter / 500.0).tolist()
-
-        self.relativeYellowMSg.data = (self.finalYellowCenter - self.originPoint).tolist()
-        self.relativeBlueMSg.data = (self.finalBlueCenter - self.originPoint).tolist()
-        self.relativeRedMSg.data = (self.finalRedCenter - self.originPoint).tolist()
-
-        self.meterYellowMsg.data = ((self.finalYellowCenter - self.originPoint) * self.pixelsToMetersRatio).tolist()
-        self.meterBlueMsg.data = ((self.finalBlueCenter - self.originPoint) * self.pixelsToMetersRatio).tolist()
-        self.meterRedMsg.data = ((self.finalRedCenter - self.originPoint) * self.pixelsToMetersRatio).tolist()
-
-        self.vectorYBtoBRMSg.data = ((self.vectorYB - self.vectorBR) / 500.0).tolist()
-        self.vectorYBMsg.data = (self.vectorYB / 500.0).tolist()
-
-        try:
-            self.greenCenterPub.publish(self.greenMsg)
-            self.yellowCenterPub.publish(self.yellowMsg)
-            self.blueCenterPub.publish(self.blueMsg)
-            self.redCenterPub.publish(self.redMsg)
-
-            self.relativeYellowPub.publish(self.relativeYellowMSg)
-            self.relativeBluePub.publish(self.relativeBlueMSg)
-            self.relativeRedPub.publish(self.relativeRedMSg)
-
-            self.meterYellowPub.publish(self.meterYellowMsg)
-            self.meterBluePub.publish(self.meterBlueMsg)
-            self.meterRedPub.publish(self.meterRedMsg)
-
-            self.vectorYBtoBRPub.publish(self.vectorYBtoBRMSg)
-            self.vectorYBPub.publish(self.vectorYBMsg)
-        except CvBridgeError as e:
-            print(e)
-
-    def getCenter(self, mask):
-        control = sum(sum(mask))
-        if control < 10:
-            return np.array([])
-        M = cv2.moments(mask)
-        X = int(M["m10"] / M["m00"])
-        Y = int(M["m01"] / M["m00"])
-        return np.array([X, -Y])
-
-    def findAllPoints(self, img):
-        redMask = cv2.inRange(img, np.array([0, 0, 20]), np.array([20, 20, 255]))
-        greenMask = cv2.inRange(img, np.array([0, 20, 0]), np.array([20, 255, 20]))
-        blueMask = cv2.inRange(img, np.array([10, 0, 0]), np.array([255, 20, 20]))
-        yellowMask = cv2.inRange(img, np.array([0, 10, 10]), np.array([0, 255, 255]))
-
-        redCenter = self.getCenter(redMask)
-        greenCenter = self.getCenter(greenMask)
-        blueCenter = self.getCenter(blueMask)
-        yellowCenter = self.getCenter(yellowMask)
-        return redCenter, greenCenter, blueCenter, yellowCenter
 
     def callback(self, data1, data2):
         try:
@@ -124,10 +52,10 @@ class vision_1:
         except CvBridgeError as e:
             print(e)
 
-        self.redC1, self.greenC1, self.blueC1, self.yellowC1 = self.findAllPoints(self.cv_image1)
-        self.redC2, self.greenC2, self.blueC2, self.yellowC2 = self.findAllPoints(self.cv_image2)
+        self.redC1, self.greenC1, self.blueC1, self.yellowC1 = self.findCenters(self.cv_image1)
+        self.redC2, self.greenC2, self.blueC2, self.yellowC2 = self.findCenters(self.cv_image2)
         
-        self.originPoint = self.originhandler(self.greenC1, self.greenC2)
+        self.originPoint = self.findOrigin(self.greenC1, self.greenC2)
         self.finalRedCenter = self.camJoin(self.redC1, self.redC2)
         self.finalBlueCenter = self.camJoin(self.blueC1, self.blueC2)
         self.finalYellowCenter = self.camJoin(self.yellowC1, self.yellowC2)
@@ -140,7 +68,6 @@ class vision_1:
         self.lastJoint2 = self.joint2.data
         self.lastJoint3 = self.joint3.data
         self.lastJoint4 = self.joint4.data
-
         try:
             self.joint2Pub.publish(self.joint2)
             self.joint3Pub.publish(self.joint3)
@@ -148,32 +75,60 @@ class vision_1:
         except CvBridgeError as e:
             print(e)
 
-        self.publishInfo()
+        self.greenDat.data = (self.originPoint / 500.0).tolist()
+        self.yellowDat.data = (self.finalYellowCenter / 500.0).tolist()
+        self.blueDat.data = (self.finalBlueCenter / 500.0).tolist()
+        self.redDat.data = (self.finalRedCenter / 500.0).tolist()
+        try:
+            self.greenCenterPub.publish(self.greenDat)
+            self.yellowCenterPub.publish(self.yellowDat)
+            self.blueCenterPub.publish(self.blueDat)
+            self.redCenterPub.publish(self.redDat)
+        except CvBridgeError as e:
+            print(e)
+
+    def getCenter(self, color):
+        control = sum(sum(color))
+        if control < 10:
+            return np.array([])
+        M = cv2.moments(color)
+        cX = int(M["m10"] / M["m00"])
+        cY = int(M["m01"] / M["m00"])
+        return np.array([X, -Y])
+
+    def findCenters(self, img):
+        red = cv2.inRange(img, np.array([0, 0, 100]), np.array([0, 0, 255]))
+        green = cv2.inRange(img, np.array([0, 100, 0]), np.array([0, 255, 0]))
+        blue = cv2.inRange(img, np.array([100, 0, 0]), np.array([255, 0, 0]))
+        yellow = cv2.inRange(img, np.array([0, 100, 100]), np.array([0, 255, 255]))
+
+        redCenter = self.getCenter(red)
+        greenCenter = self.getCenter(green)
+        blueCenter = self.getCenter(blue)
+        yellowCenter = self.getCenter(yellow)
+
+        return redCenter, greenCenter, blueCenter, yellowCenter
 
     def calculateAngles(self):
         self.vectorYB = self.finalBlueCenter - self.finalYellowCenter
         self.vectorBR = self.finalRedCenter - self.finalBlueCenter
 
-        # when rotating about x axis, the x-coordinate doesn't change - the focus should be on y
         vecjoint2 = np.array([self.vectorYB[0], self.vectorYB[2]])
         vecjoint3 = np.array([self.vectorYB[1], self.vectorYB[2]])
         zUnitVector = np.array([0, 1])
 
         self.joint2.data = np.arctan2(np.cross(vecjoint2, zUnitVector), np.dot(zUnitVector, vecjoint2))
+              
 
         joint3Ang = np.arctan2(np.cross(vecjoint3, zUnitVector), np.dot(zUnitVector, vecjoint3))
         self.joint3.data = -(joint3Ang - np.sign(joint3Ang) * 0.35 * abs(np.sin(self.joint2.data)))
 
-        th3 = -self.joint3.data
-        reverseM3 = np.array([[1, 0, 0],
-                                  [0, np.cos(th3), -np.sin(th3)],
-                                  [0, np.sin(th3), np.cos(th3)]])
+        th3 = -self.joint3.data 
+        reverseM3 = np.array([[1, 0, 0], [0, np.cos(th3), -np.sin(th3)], [0, np.sin(th3), np.cos(th3)]])
         revDot3 = reverseM3.dot(self.vectorBR.T)
         
         th2 = -self.joint2.data
-        reverseM1 = np.array([[np.cos(th2), 0, np.sin(th2)],
-                                  [0, 1, 0],
-                                  [-np.sin(th2), 0, np.cos(th2)]])
+        reverseM1 = np.array([[np.cos(th2), 0, np.sin(th2)], [0, 1, 0], [-np.sin(th2), 0, np.cos(th2)]])
         revDot2 = reverseM1.dot(revDot3.T)
 
         vecjoint4 = revDot2[0:3:2]
@@ -183,9 +138,9 @@ class vision_1:
                 
         self.joint4.data = vecj4 * sign
 
-        self.joint2.data = self.limAngle(self.joint2.data, np.pi / 2.0, self.lastJoint2)
-        self.joint3.data = self.limAngle(self.joint3.data, np.pi / 2.0, self.lastJoint3)
-        self.joint4.data = self.limAngle(self.joint4.data, np.pi / 2.0, self.lastJoint4)
+        self.joint2.data = self.limit(self.joint2.data, np.pi / 2.0, self.lastJoint2)
+        self.joint3.data = self.limit(self.joint3.data, np.pi / 2.0, self.lastJoint3)
+        self.joint4.data = self.limit(self.joint4.data, np.pi / 2.0, self.lastJoint4)
 
     def vectorAng(self,vect1,vect2):
         dot_vect1_vect2 = np.dot(vect1,vect2)
@@ -193,36 +148,35 @@ class vision_1:
         length_vect2 = np.sqrt(np.sum(vect2 ** 2))
         return np.arccos(dot_vect1_vect2/(length_vect1 * length_vect2))
 
-    def limAngle(self, jointAngle, limit, lastAngle):
-        jointAngle = max(min(jointAngle, limit), -limit)
-        if (abs(jointAngle - lastAngle) > 0.1) and (abs(jointAngle - lastAngle) <= 1.5) and (
-                self.iterationNumber > 10):
-            jointAngle += np.sign(jointAngle - lastAngle) * 0.03
+    def limit(self, jointAngle, lim, lastAngle):
+        jointAngle = max(min(jointAngle, lim), -lim)
         if (abs(jointAngle - lastAngle) > 1.5) and (self.iterationNumber > 10):
             jointAngle = lastAngle
+        if (abs(jointAngle - lastAngle) > 0.3) and (abs(jointAngle - lastAngle) <= 1.5) and (self.iterationNumber > 10):
+            jointAngle += np.sign(jointAngle - lastAngle) * 0.03
         return jointAngle
 
     def camJoin(self, cam1, cam2):
-        if (cam1.size == 0) and (cam2.size == 0):
+        if (cam1.size == 2) and (cam2.size == 2):
+            return np.array([cam2[0], cam1[0], (cam2[1] + cam1[1]) / 2])
+        elif (cam1.size == 0) and (cam2.size == 0):
             return np.array([-1.0, -1.0, -1.0])
         elif cam1.size == 0:
             return np.array([cam2[0], self.originPoint[1], cam2[1]])
         elif cam2.size == 0:
             return np.array([self.originPoint[1], cam1[0], cam1[1]])
-        elif (cam1.size == 2) and (cam2.size == 2):
-            return np.array([cam2[0], cam1[0], (cam2[1] + cam1[1]) / 2])
         else:
             return np.array([-1.0, -1.0, -1.0])
 
-    def originhandler(self, cam1, cam2):
-        if (cam1.size == 0) and (cam2.size == 0):
+    def findOrigin(self, cam1, cam2):
+        if (cam1.size == 2) and (cam2.size == 2):
+            return np.array([cam2[0], cam1[0], (cam2[1] + cam1[1]) / 2])
+        elif (cam1.size == 0) and (cam2.size == 0):
             return np.array([-1.0, -1.0, -1.0])
         elif cam1.size == 0:
             return np.array([cam2[0], cam2[0], cam2[1]])
         elif cam2.size == 0:
             return np.array([cam1[0], cam1[0], cam1[1]])
-        elif (cam1.size == 2) and (cam2.size == 2):
-            return np.array([cam2[0], cam1[0], (cam2[1] + cam1[1]) / 2])
         else:
             return np.array([-1.0, -1.0, -1.0])
 
