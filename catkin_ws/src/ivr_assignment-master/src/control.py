@@ -26,6 +26,7 @@ class image_converter:
 
     #initialize publishers to send joints' angular position to the robot - joint 2 is frozen
     self.joint_1_pub = rospy.Publisher("/robot/joint1_position_controller/command", Float64, queue_size=10)
+    self.joint_2_pub = rospy.Publisher("/robot/joint2_position_controller/command", Float64, queue_size=10)
     self.joint_3_pub = rospy.Publisher("/robot/joint3_position_controller/command", Float64, queue_size=10)
     self.joint_4_pub = rospy.Publisher("/robot/joint4_position_controller/command", Float64, queue_size=10)
 
