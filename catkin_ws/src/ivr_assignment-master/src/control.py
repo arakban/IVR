@@ -33,15 +33,17 @@ class image_converter:
     self.joint_angles = np.array([0.0,0.0,0.0,0.0])
 
     self.joint1 = Float64()
+    self.joint2 = Float64()
     self.joint3 = Float64()
     self.joint4 = Float64()
 
     #target position
     self.target = np.array([0.0,0.0,0.0,0.0])
-    self.target_sub = rospy.Subscriber("/target_pos", Float64MultiArray, self.update_target)
+    self.target_sub = rospy.Subscriber("/target_pos", Float64MultiArray, self.callback_target)
 
     #end effector - we don't care about orientation
-    self.end_effector_pos = np.array([0.0, 0.0, 10.0], dtype='float64')
+    self.end_effector_pos = np.array([0.0, 0.0, 0], dtype='float64')
+    self.end_effector_sub =  self.joint1_sub = rospy.Subscriber("red_centre", Float64MultiArray, self.callback_end_effector)
     # forward kinematics calculation publisher
     self.forward_kin_pub = rospy.Publisher("fk_end_effector", Float64MultiArray, queue_size=10)
     
@@ -59,43 +61,42 @@ class image_converter:
     j1, j2, j3, j4 = self.joint_angles
 
     #make calculations easier to read
-    s1, c1, s2, c2, c3, c4 = np.sin(j1), np.cos(j1), np.sin(j2), np.cos(j2), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
+    s1, c1, s2, c2, s3, c3, s4, c4 = np.sin(j1), np.cos(j1), np.sin(j2), np.cos(j2), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
     
     #calculate the effect of rotation on each componenet 
-    x = 2.8 * c1 + 2.8 * (c1 * c3 - s1 * s2 * s3)
-    y = 2.8 * (c * np.sin(j2) * s1 - s1 * c3) - 7.2 * s1
-    z = -2.8 * c1 * s1 + 4
+    x = 2.8 * (c1 * s2 * s3)  + 2.8 * (s1 * s3) + 3.2 * (c1 * s1)
+    y = 2.8 * (s1* s2* c2) - 2/8 * (s1*s2) + 3.2 * (s1 * s2) 
+    z = 2.8 * (c1 * c2) + 3.2 * (s1 * s1) + 4
     end_effector = np.array([x,y,z])
     
     return end_effector
-
   # calculate the Jacobian matrix to do inverse kinematics - get the relation between joint velocities & end-effector velocities of a robot manipulator
   # i.e. how much each joint needs to move to get to the target position
   def calc_jacobian(self):
     j1, j2, j3, j4 = self.joint_angles
-    s1, c1, s2, c2, c3, c4 = np.sin(j1), np.cos(j1), np.sin(j2), np.cos(j2), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
+    s1, c1, s2, c2, s3, c3, s4, c4 = np.sin(j1), np.cos(j1), np.sin(j2), np.cos(j2), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
     
     #initialise a empty matrix with dimensions 
     jacob_matrix = np.zeroes(shape=(3,3))
     
-    jacob_matrix[0,0] = -7.8 * s1 + 2.8*(s1 * c3) - (c1 * s2 * s3)      #R00
-    jacob_matrix[0,1] = 2.8 * (-s1 * c1 * s3)                           #R01
-    jacob_matrix[0,2] = 2.8 * ((-c1 * s3) - (s1 * s2 * c3))             #R02
+    jacob_matrix[0,0] = 2.8 * (s1 * s3 * c4) + 2.8 * (s1 * s3) - (c1 * s2 * s3)                        #RX1
+    jacob_matrix[0,1] = 2.8 * (-s1 * c1 * s3)                                                          #RX3
+    jacob_matrix[0,2] = 2.8 * ((-c1 * s3) - (s1 * s2 * c3))                                            #RX4
 
-    jacob_matrix[1,0] = 2.8 * ((-c1 * s3) - (s1 * s2 * s3))             #R10
-    jacob_matrix[1,1] = 2.8 * (c1 * c2 * s3)                            #R11
-    jacob_matrix[1,2] = 2.8 * ((c1 * s2 * c3) + (s1 * s3))              #R12
+    jacob_matrix[1,0] = 2.8 * (c1 * s3 * c4) - 2.8 * (s1 * s4) + 3.2 * (s1*s3)                         #RY1
+    jacob_matrix[1,1] = 2.8 * (s1 * s3 * s4) - 2.8 *(c1 * s4) + 3.2 * (s1 * s3)                        #RY3
+    jacob_matrix[1,2] = 2.8 * (s1 * s3 * s4) - 2.8 * (c1 * c4) + 3.2 * (s3 * s4)                       #RY4
 
-    jacob_matrix[2,0] = 0                                               #R20
-    jacob_matrix[2,1] = 2.8 * (s2 * s3)                                 #R21
-    jacob_matrix[2,2] = -2.8 * (c2 * c3)                                #R22
+    jacob_matrix[2,0] = 2.8 * c3*c4 + 3.2 * c3                                                         #RZ1
+    jacob_matrix[2,1] = 2.8 * (-s4 * s4) - 3.2 * s3                                                    #RZ3
+    jacob_matrix[2,2] = 2.8 * (c3 * -s4) + 3.2 * c3                                                    #RZ4
 
     return jacob_matrix
 
   def control_open(self):
     #dt 
     curr_time = np.array([rospy.get_time()])
-    dt = cur_time - self.time_previous_step
+    dt = curr_time - self.time_previous_step
     #make new time current time
     self.time_previous_step = curr_time
   
@@ -118,23 +119,43 @@ class image_converter:
     joints_delta = np.dot(J_inv,self.error.T) * dt
 
     #new joint angles
-    self.joint_angles  = self.joint_angles + joints_delta
+    new_joint_angles  = self.joint_angles + joints_delta
 
-    #publish new joint angle
-
+    return new_joint_angles
 
   # Recieve data from joint1 
   def callback_joint1(self,joints):
+    #update 1st joint
     self.joint_angles[0] = joints.data[0]
 
   def callback_joint3(self,joints):
+    #update 2nd joint
     self.joint_angles[2] = joints.data[2]
 
   def callback_joint4(self,joints):
+    #update 4th joint 
     self.joint_angles[3] = joints.data[3]
+    
+    #now calcualte new joint angles
+    new_joint_angles  = self.control_open()
+    
+    #publish new joing angles
+    self.joint1.data = new_joint_angles[0]
+    self.joint2.data = new_joint_angles[1]
+    self.joint3.data = new_joint_angles[2]
+    self.joint4.data = new_joint_angles[3]
 
-  def update_target(self):
-    self.target = np.array(target.data)
+    self.joint_1_pub.publish(self.joint1)
+    self.joint_2_pub.publish(self.joint2)
+    self.joint_3_pub.publish(self.joint3)
+    self.joint_4_pub.publish(self.joint4)
+
+  def callback_target(self, target_data):
+    self.target = target_data.data
+
+  def callback_end_effector(self,red_centre):
+    self.end_effector_pos = red_centre.data
+
     
 
 # call the class
