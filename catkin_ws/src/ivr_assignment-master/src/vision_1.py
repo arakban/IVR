@@ -94,7 +94,7 @@ class vision_1:
         M = cv2.moments(color)
         cX = int(M["m10"] / M["m00"])
         cY = int(M["m01"] / M["m00"])
-        return np.array([X, -Y])
+        return np.array([cX, -cY])
 
     def findCenters(self, img):
         red = cv2.inRange(img, np.array([0, 0, 100]), np.array([0, 0, 255]))
