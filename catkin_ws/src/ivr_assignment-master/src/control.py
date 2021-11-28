@@ -27,73 +27,72 @@ class image_converter:
 
     #initialize publishers to send joints' angular position to the robot - joint 2 is frozen
     self.joint_1_pub = rospy.Publisher("/robot/joint1_position_controller/command", Float64, queue_size=10)
-    self.joint_2_pub = rospy.Publisher("/robot/joint2_position_controller/command", Float64, queue_size=10)
     self.joint_3_pub = rospy.Publisher("/robot/joint3_position_controller/command", Float64, queue_size=10)
     self.joint_4_pub = rospy.Publisher("/robot/joint4_position_controller/command", Float64, queue_size=10)
 
     #array to store joint data
-    self.joint_angles = np.array([0.0,0.0,0.0,0.0])
+    self.joint_angles = np.array([0.0,0.0,0.0])
 
     self.joint1 = Float64()
-    self.joint2 = Float64()
     self.joint3 = Float64()
     self.joint4 = Float64()
 
     #target position
-    self.target = np.array([0.0,0.0,0.0,0.0])
+    self.target = np.array([0.0,0.0,0.0])
     self.target_sub = rospy.Subscriber("/target_pos", Float64MultiArray, self.callback_target)
 
     #end effector - we don't care about orientation
     self.end_effector_pos = np.array([0.0, 0.0, 0.0], dtype='float64')
     self.end_effector_sub =  self.joint1_sub = rospy.Subscriber("red_centre", Float64MultiArray, self.callback_end_effector)
     
-    # forward kinematics calculation publisher
+    #forward kinematics calculation publisher
     self.forward_kin_calc = Float64MultiArray()
     self.forward_kin_pub = rospy.Publisher("fk_end_effector", Float64MultiArray, queue_size=10)
     
     #error data and pub
-    self.error = np.array([0.0, 0.0, 0.0,0.0], dtype='float64')
+    self.error = np.array([0.0,0.0,0.0,0.0], dtype='float64')
     self.error_d = np.array([0.0,0.0,0.0,0.0], dtype='float64')
     self.error_pub = rospy.Publisher("error", Float64MultiArray, queue_size=10)
 
-    self.time_previous_step = np.array([rospy.get_time()], dtype='float64')
+    self.time_previous_step = rospy.get_time()
 
   
   # forward kinematics formuala, to get the 
   def forward_kinematics(self):
     # get joint angles 
-    j1, j2, j3, j4 = self.joint_angles
+    j1, j3, j4 = self.joint_angles
 
     #make calculations easier to read
-    s1, c1, s2, c2, s3, c3, s4, c4 = np.sin(j1), np.cos(j1), np.sin(j2), np.cos(j2), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
+    s1, c1, s3, c3, s4, c4 = np.sin(j1), np.cos(j1), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
     
     #calculate the effect of rotation on each componenet 
-    x = 2.8 * (c1 * s2 * s3)  + 2.8 * (s1 * s3) + 3.2 * (c1 * s1)
-    y = 2.8 * (s1* s2* c2) - 2/8 * (s1*s2) + 3.2 * (s1 * s2) 
-    z = 2.8 * (c1 * c2) + 3.2 * (s1 * s1) + 4
+    x = 2.8 * (c1 * s3 * s4)  + 2.8 * (s1 * s4) + 3.2 * (c1 * s3)
+    y = 2.8 * (s1 * s3 * c3) - 2.8 * (s1*s3) + 3.2 * (s1 * s3) 
+    z = 2.8 * (c3 * c4) + 3.2 * (c3) + 4
     end_effector = np.array([x,y,z])
     
     return end_effector
+  
   # calculate the Jacobian matrix to do inverse kinematics - get the relation between joint velocities & end-effector velocities of a robot manipulator
   # i.e. how much each joint needs to move to get to the target position
   def calc_jacobian(self):
-    j1, j2, j3, j4 = self.joint_angles
-    s1, c1, s2, c2, s3, c3, s4, c4 = np.sin(j1), np.cos(j1), np.sin(j2), np.cos(j2), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
+    j1, j3, j4 = self.joint_angles
+    s1, c1, s3, c3, s4, c4 = np.sin(j1), np.cos(j1), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
     
     #initialise a empty matrix with dimensions 
     jacob_matrix = np.zeros(shape=(3,3))
     
-    jacob_matrix[0,0] = 2.8 * (s1 * s3 * c4) + 2.8 * (s1 * s3) - (c1 * s2 * s3)                        #RX1
+    jacob_matrix[0,0] = 2.8 * (s1 * s3 * c4) - 2.8 * (c1 * s4) - 3.2 * (s1 * s3)                       #RX1
     jacob_matrix[0,1] = 2.8 * (-s1 * c1 * s3)                                                          #RX3
-    jacob_matrix[0,2] = 2.8 * ((-c1 * s3) - (s1 * s2 * c3))                                            #RX4
+    jacob_matrix[0,2] = 2.8 * ((-c1 * s3) - (s1 * s3 * c3))                                            #RX4
 
-    jacob_matrix[1,0] = 2.8 * (c1 * s3 * c4) - 2.8 * (s1 * s4) + 3.2 * (s1*s3)                         #RY1
-    jacob_matrix[1,1] = 2.8 * (s1 * s3 * s4) - 2.8 *(c1 * s4) + 3.2 * (s1 * s3)                        #RY3
-    jacob_matrix[1,2] = 2.8 * (s1 * s3 * s4) - 2.8 * (c1 * c4) + 3.2 * (s3 * s4)                       #RY4
+    jacob_matrix[1,0] = 2.8 * (c1 * s3 * c4) - 2.8 * (-s1 * s4) + 3.2 * (c1 * s3)                      #RY1
+    jacob_matrix[1,1] = 2.8 * (s1 * c3 * c4) - 2.8 * (c1 * s4) + 3.2 * (s1 * c3)                       #RY3
+    jacob_matrix[1,2] = 2.8 * (s1 * s3 * s4) - 2.8 * (c1 * c4) + 3.2 * (s1 * s3)                       #RY4
 
-    jacob_matrix[2,0] = 2.8 * c3*c4 + 3.2 * c3                                                         #RZ1
-    jacob_matrix[2,1] = 2.8 * (-s4 * s4) - 3.2 * s3                                                    #RZ3
-    jacob_matrix[2,2] = 2.8 * (c3 * -s4) + 3.2 * c3                                                    #RZ4
+    jacob_matrix[2,0] = 2.8 * (c3 * c4) + 3.2 * c3  + 4                                                #RZ1
+    jacob_matrix[2,1] = 2.8 * (-s4 * c4) - 3.2 * s3 + 4                                                #RZ3
+    jacob_matrix[2,2] = 2.8 * (c3 * -s4) + 3.2 * c3 + 4                                                #RZ4
 
     return jacob_matrix
 
@@ -134,27 +133,21 @@ class image_converter:
 
   def callback_joint3(self,joints):
     #update 2nd joint
-    self.joint_angles[2] = joints.data
+    self.joint_angles[1] = joints.data
 
   def callback_joint4(self,joints):
     #update 4th joint 
-    self.joint_angles[3] = joints.data
-
-    #calculate forward kinematics and publish
-    self.forward_kin_calc = self.forward_kinematics()
-    self.forward_kin_pub.publish(self.forward_kin_calc)
+    self.joint_angles[2] = joints.data
     
     #now calcualte new joint angles
     new_joint_angles = self.control_open()
     
     #publish new joint angles
     self.joint1 = new_joint_angles[0]
-    self.joint2 = new_joint_angles[1]
-    self.joint3 = new_joint_angles[2]
-    self.joint4 = new_joint_angles[3]
+    self.joint3 = new_joint_angles[1]
+    self.joint4 = new_joint_angles[2]
 
     self.joint_1_pub.publish(self.joint1)
-    self.joint_2_pub.publish(self.joint2)
     self.joint_3_pub.publish(self.joint3)
     self.joint_4_pub.publish(self.joint4)
 
@@ -163,6 +156,11 @@ class image_converter:
 
   def callback_end_effector(self,red_centre):
     self.end_effector_pos = red_centre.data
+    
+    #calculate forward kinematics and publish
+    self.forward_kin_calc = self.forward_kinematics()
+    print(f"End-effector position: {self.end_effector_pos}")
+    print(f"End effector position calculate by FK: {self.forward_kin_calc}")
 
     
 
