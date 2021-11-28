@@ -15,6 +15,7 @@ from numpy import sin,cos
 class vision_2:
     def __init__(self):
         rospy.init_node("vision_2", anonymous=True)
+        rate = rospy.Rate(50)  # 50hz
 
         self.greenC1 = np.array([])
         self.redC1 = np.array([])

@@ -18,6 +18,7 @@ class image_converter:
   def __init__(self):
     #initialize the node named controller
     rospy.init_node('controller', anonymous=True)
+    rate = rospy.Rate(50)  # 50hz
     
     #initialize subscribers to get joints' angular position to the robot
     self.joint1_sub = rospy.Subscriber("joint_angle_1", Float64, self.callback_joint1)
@@ -45,7 +46,9 @@ class image_converter:
     #end effector - we don't care about orientation
     self.end_effector_pos = np.array([0.0, 0.0, 0.0], dtype='float64')
     self.end_effector_sub =  self.joint1_sub = rospy.Subscriber("red_centre", Float64MultiArray, self.callback_end_effector)
+    
     # forward kinematics calculation publisher
+    self.forward_kin_calc = Float64MultiArray()
     self.forward_kin_pub = rospy.Publisher("fk_end_effector", Float64MultiArray, queue_size=10)
     
     #error data and pub
@@ -138,17 +141,17 @@ class image_converter:
     self.joint_angles[3] = joints.data
 
     #calculate forward kinematics and publish
-    end_effector = self.forward_kinematics()
-    self.forward_kin_pub.publish(end_effector)
+    self.forward_kin_calc = self.forward_kinematics()
+    self.forward_kin_pub.publish(self.forward_kin_calc)
     
     #now calcualte new joint angles
-    new_joint_angles  = self.control_open()
+    new_joint_angles = self.control_open()
     
     #publish new joint angles
-    self.joint1.data = new_joint_angles[0]
-    self.joint2.data = new_joint_angles[1]
-    self.joint3.data = new_joint_angles[2]
-    self.joint4.data = new_joint_angles[3]
+    self.joint1 = new_joint_angles[0]
+    self.joint2 = new_joint_angles[1]
+    self.joint3 = new_joint_angles[2]
+    self.joint4 = new_joint_angles[3]
 
     self.joint_1_pub.publish(self.joint1)
     self.joint_2_pub.publish(self.joint2)
