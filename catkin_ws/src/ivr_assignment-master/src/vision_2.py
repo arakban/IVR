@@ -84,6 +84,7 @@ class vision_2:
             self.redCenterPub.publish(self.redMsg)
         except CvBridgeError as e:
             print(e)
+        
 
     def getCenter(self, mask):
         control = sum(sum(mask))
