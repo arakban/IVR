@@ -66,27 +66,25 @@ class vision_2:
         self.lastJoint1 = self.joint1.data
         self.lastJoint3 = self.joint3.data
         self.lastJoint4 = self.joint4.data
+        try:
+            self.joint1Pub.publish(self.joint1)
+            self.joint3Pub.publish(self.joint3)
+            self.joint4Pub.publish(self.joint4)
+        except CvBridgeError as e:
+            print(e)
 
-        while not rospy.is_shutdown():
-            try:
-                self.joint1Pub.publish(self.joint1)
-                self.joint3Pub.publish(self.joint3)
-                self.joint4Pub.publish(self.joint4)
-            except CvBridgeError as e:
-                print(e)
-
-            self.greenMsg.data = (self.originPoint / 500.0).tolist()
-            self.yellowMsg.data = (self.finalYellowCenter / 500.0).tolist()
-            self.blueMsg.data = (self.finalBlueCenter / 500.0).tolist()
-            self.redMsg.data = (self.finalRedCenter / 500.0).tolist()
-            try:
-                self.greenCenterPub.publish(self.greenMsg)
-                self.yellowCenterPub.publish(self.yellowMsg)
-                self.blueCenterPub.publish(self.blueMsg)
-                self.redCenterPub.publish(self.redMsg)
-            except CvBridgeError as e:
-                print(e)
-            self.rate.sleep()
+        self.greenMsg.data = (self.originPoint / 500.0).tolist()
+        self.yellowMsg.data = (self.finalYellowCenter / 500.0).tolist()
+        self.blueMsg.data = (self.finalBlueCenter / 500.0).tolist()
+        self.redMsg.data = (self.finalRedCenter / 500.0).tolist()
+        try:
+            self.greenCenterPub.publish(self.greenMsg)
+            self.yellowCenterPub.publish(self.yellowMsg)
+            self.blueCenterPub.publish(self.blueMsg)
+            self.redCenterPub.publish(self.redMsg)
+        except CvBridgeError as e:
+            print(e)
+        
 
     def getCenter(self, mask):
         control = sum(sum(mask))

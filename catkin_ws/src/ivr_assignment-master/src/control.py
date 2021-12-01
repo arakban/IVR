@@ -6,6 +6,7 @@ import rospy
 import cv2
 import numpy as np
 import logging 
+import message_filters
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float64, Float64MultiArray
@@ -19,11 +20,13 @@ class control:
     #initialize the node named controller
     rospy.init_node('controller', anonymous=True)
     rate = rospy.Rate(50)  # 50hz
+    #bridge between openCV and ROS
+    self.bridge = CvBridge()
     
     #initialize subscribers to get joints' angular position to the robot
-    self.joint1_sub = rospy.Subscriber("joint_angle_1", Float64, self.callback_joint1)
-    self.joint1_sub = rospy.Subscriber("joint_angle_3", Float64, self.callback_joint3)
-    self.joint1_sub = rospy.Subscriber("joint_angle_4", Float64, self.callback_joint4)
+    self.joint1_sub = message_filtersSubscriber("joint_angle_1", Float64)
+    self.joint3_sub = message_filters.Subscriber("joint_angle_3", Float64)
+    self.joint4_sub = message_filters.Subscriber("joint_angle_4", Float64)
 
     #initialize publishers to send joints' angular position to the robot - joint 2 is frozen
     self.joint_1_pub = rospy.Publisher("/robot/joint1_position_controller/command", Float64, queue_size=10)
@@ -39,14 +42,13 @@ class control:
 
     #target position
     self.target = Float64MultiArray()
-    self.target_sub = rospy.Subscriber("/target_pos", Float64MultiArray, self.callback_target)
+    self.target_sub = message_filters.Subscriber("/target_pos", Float64MultiArray)
 
     #end effector - we don't care about orientation
     self.end_effector_pos = Float64MultiArray()
-    self.end_effector_sub = rospy.Subscriber("red_centre", Float64MultiArray, self.callback_end_effector)
+    self.end_effector_sub = message_filters.Subscriber("red_centre", Float64MultiArray)
     self.end_effector_pub = rospy.Publisher("/robot/joint4_position_controller/command", Float64, queue_size=10)
 
-    
     #forward kinematics calculation publisher
     self.forward_kin_calc = Float64MultiArray()
     self.forward_kin_pub = rospy.Publisher("fk_end_effector", Float64MultiArray, queue_size=10)
@@ -57,6 +59,11 @@ class control:
     #self.error_pub = rospy.Publisher("error", Float64MultiArray, queue_size=10)
 
     self.time_previous_step = rospy.get_time()
+
+    #synchronise topics
+    self.ts = message_filters.ApproximateTimeSynchronizer([self.joint1_sub, self.joint3_su, self.joint4_sub, self.target_sub, self.end_effector_sub],
+                                                            queue_size=10, slop=0.02, allow_headerless=True)
+    self.ts.registerCallback(self.callback)
 
   
   # forward kinematics formuala, to get the 
@@ -128,27 +135,25 @@ class control:
 
     return new_joint_angles
 
-  # Recieve data from joint1 
-  def callback_joint1(self,joints):
+  # Receive data from joint1 
+  def callback(self,joint1,joint3,joint4,target,red_centre):
     #update 1st joint
-    self.joint_angles[0] = joints.data
+    self.joint_angles[0] = joint1.data
 
-  def callback_joint3(self,joints):
     #update 3rd joint
-    self.joint_angles[1] = joints.data
+    self.joint_angles[1] = joint3.data
 
-  def callback_joint4(self,joints):
     #update 4th joint 
-    self.joint_angles[2] = joints.data
-    #calculate forward kinematics and publish
-    self.forward_kin_calc = self.forward_kinematics()
-    self.forward_kin_pub.publish(self.forward_kin_calc.data)
-    #print(f"End-effector position: {self.end_effector_pos}")
-    #print(f"End effector position calculate by FK: {self.forward_kin_calc}")
+    self.joint_angles[2] = joint4.data
 
-    self.end_effector_pub(self.end_effector_pos.data)
+    #calculate forward kinematics to get the estimation of joint states and publish
+    self.forward_kin_calc = self.forward_kinematics()
+    self.forward_kin_pub.publish(self.forward_kin_calc)
+
+    #publish end-efector estimated by the images 
+    self.end_effector_pub.publish(self.end_effector_pos)
     
-  def callback_target(self, target_data):
+    #make robot move towards target using a control loop
     self.target = target_data.data
     #now calculate new joint angles
     new_joint_angles = self.control_open()
@@ -158,11 +163,10 @@ class control:
     self.joint3 = new_joint_angles[1]
     self.joint4 = new_joint_angles[2]
 
-    self.joint_1_pub.publish(self.joint1.data)
-    self.joint_3_pub.publish(self.joint3.data)
-    self.joint_4_pub.publish(self.joint4.data)
+    self.joint_1_pub.publish(self.joint1)
+    self.joint_3_pub.publish(self.joint3)
+    self.joint_4_pub.publish(self.joint4)
 
-  def callback_end_effector(self,red_centre):
     self.end_effector_pos = red_centre.data
 
 # call the class
