@@ -12,8 +12,7 @@ from std_msgs.msg import Float64, Float64MultiArray
 from cv_bridge import CvBridge, CvBridgeError
 
 
-class image_converter:
-
+class control:
   # Defines publisher and subscriber
   def __init__(self):
     #initialize the node named controller
@@ -52,7 +51,6 @@ class image_converter:
     #error data and pub
     self.error = np.array([0.0,0.0,0.0,0.0], dtype='float64')
     self.error_d = np.array([0.0,0.0,0.0,0.0], dtype='float64')
-    self.error_pub = rospy.Publisher("error", Float64MultiArray, queue_size=10)
 
     self.time_previous_step = rospy.get_time()
 
@@ -84,7 +82,7 @@ class image_converter:
     
     jacob_matrix[0,0] = 2.8 * (s1 * s3 * c4) - 2.8 * (c1 * s4) - 3.2 * (s1 * s3)                       #RX1
     jacob_matrix[0,1] = 2.8 * (-s1 * c1 * s3)                                                          #RX3
-    jacob_matrix[0,2] = 2.8 * ((-c1 * s3) - (s1 * s3 * c3))                                            #RX4
+    jacob_matrix[0,2] = 2.8 * (-c1 * s3) - 2.8 * (s1 * s3 * c3)                                        #RX4
 
     jacob_matrix[1,0] = 2.8 * (c1 * s3 * c4) - 2.8 * (-s1 * s4) + 3.2 * (c1 * s3)                      #RY1
     jacob_matrix[1,1] = 2.8 * (s1 * c3 * c4) - 2.8 * (c1 * s4) + 3.2 * (s1 * c3)                       #RY3
@@ -118,15 +116,14 @@ class image_converter:
     #calculate delta of error
     self.error_d = self.error/dt
 
-    #calculate the estimated change in joint angles needed for desired movement  
-    joints_delta = np.dot(J_inv,self.error.T) * dt
+    #PID control: calculate the estimated change in joint angles needed for desired movement  
+    joints_delta = np.dot(J_inv,self.error_d.T) * dt
 
     #new joint angles
     new_joint_angles  = self.joint_angles + joints_delta
 
     return new_joint_angles
-
-  # Recieve data from joint1 
+ 
   def callback_joint1(self,joints):
     #update 1st joint
     self.joint_angles[0] = joints.data
@@ -139,9 +136,9 @@ class image_converter:
     #update 4th joint 
     self.joint_angles[2] = joints.data
     
-    #now calcualte new joint angles
+    #now calculate new joint angles
     new_joint_angles = self.control_open()
-    
+
     #publish new joint angles
     self.joint1 = new_joint_angles[0]
     self.joint3 = new_joint_angles[1]
@@ -166,7 +163,7 @@ class image_converter:
 
 # call the class
 def main(args):
-  ic = image_converter()
+  c = control()
   try:
     rospy.spin()
   except KeyboardInterrupt:
