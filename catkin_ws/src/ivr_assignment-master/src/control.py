@@ -136,7 +136,7 @@ class control:
     return new_joint_angles
 
   # Receive data from joint1 
-  def callback(self,joint1,joint3,joint4,target,red_centre):
+  def callback(self,joint1,joint3,joint4,target_data,red_centre):
     #update 1st joint
     self.joint_angles[0] = joint1.data
 
@@ -148,13 +148,16 @@ class control:
 
     #calculate forward kinematics to get the estimation of joint states and publish
     self.forward_kin_calc = self.forward_kinematics()
-    self.forward_kin_pub.publish(self.forward_kin_calc)
+    try:
+      self.forward_kin_pub.publish(self.forward_kin_calc)
+    except CvBridgeError as e:
+      print(e)
 
     #publish end-efector estimated by the images 
     self.end_effector_pub.publish(self.end_effector_pos)
     
     #make robot move towards target using a control loop
-    self.target = target_data.data
+    self.target = targe_data.data
     #now calculate new joint angles
     new_joint_angles = self.control_open()
     
@@ -162,10 +165,12 @@ class control:
     self.joint1 = new_joint_angles[0]
     self.joint3 = new_joint_angles[1]
     self.joint4 = new_joint_angles[2]
-
-    self.joint_1_pub.publish(self.joint1)
-    self.joint_3_pub.publish(self.joint3)
-    self.joint_4_pub.publish(self.joint4)
+    try: 
+      self.joint_1_pub.publish(self.joint1)
+      self.joint_3_pub.publish(self.joint3)
+      self.joint_4_pub.publish(self.joint4)
+    except CvBridgeError as e:
+      print(e)
 
     self.end_effector_pos = red_centre.data
 
