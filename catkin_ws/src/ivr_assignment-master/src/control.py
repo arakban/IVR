@@ -12,7 +12,7 @@ from std_msgs.msg import Float64, Float64MultiArray
 from cv_bridge import CvBridge, CvBridgeError
 
 
-class image_converter:
+class control:
 
   # Defines publisher and subscriber
   def __init__(self):
@@ -38,12 +38,14 @@ class image_converter:
     self.joint4 = Float64()
 
     #target position
-    self.target = np.array([0.0,0.0,0.0])
+    self.target = Float64MultiArray()
     self.target_sub = rospy.Subscriber("/target_pos", Float64MultiArray, self.callback_target)
 
     #end effector - we don't care about orientation
-    self.end_effector_pos = np.array([0.0, 0.0, 0.0], dtype='float64')
-    self.end_effector_sub =  self.joint1_sub = rospy.Subscriber("red_centre", Float64MultiArray, self.callback_end_effector)
+    self.end_effector_pos = Float64MultiArray()
+    self.end_effector_sub = rospy.Subscriber("red_centre", Float64MultiArray, self.callback_end_effector)
+    self.end_effector_pub = rospy.Publisher("/robot/joint4_position_controller/command", Float64, queue_size=10)
+
     
     #forward kinematics calculation publisher
     self.forward_kin_calc = Float64MultiArray()
@@ -52,7 +54,7 @@ class image_converter:
     #error data and pub
     self.error = np.array([0.0,0.0,0.0,0.0], dtype='float64')
     self.error_d = np.array([0.0,0.0,0.0,0.0], dtype='float64')
-    self.error_pub = rospy.Publisher("error", Float64MultiArray, queue_size=10)
+    #self.error_pub = rospy.Publisher("error", Float64MultiArray, queue_size=10)
 
     self.time_previous_step = rospy.get_time()
 
@@ -132,14 +134,23 @@ class image_converter:
     self.joint_angles[0] = joints.data
 
   def callback_joint3(self,joints):
-    #update 2nd joint
+    #update 3rd joint
     self.joint_angles[1] = joints.data
 
   def callback_joint4(self,joints):
     #update 4th joint 
     self.joint_angles[2] = joints.data
+    #calculate forward kinematics and publish
+    self.forward_kin_calc = self.forward_kinematics()
+    self.forward_kin_pub.publish(self.forward_kin_calc.data)
+    #print(f"End-effector position: {self.end_effector_pos}")
+    #print(f"End effector position calculate by FK: {self.forward_kin_calc}")
+
+    self.end_effector_pub(self.end_effector_pos.data)
     
-    #now calcualte new joint angles
+  def callback_target(self, target_data):
+    self.target = target_data.data
+    #now calculate new joint angles
     new_joint_angles = self.control_open()
     
     #publish new joint angles
@@ -147,26 +158,16 @@ class image_converter:
     self.joint3 = new_joint_angles[1]
     self.joint4 = new_joint_angles[2]
 
-    self.joint_1_pub.publish(self.joint1)
-    self.joint_3_pub.publish(self.joint3)
-    self.joint_4_pub.publish(self.joint4)
-
-  def callback_target(self, target_data):
-    self.target = target_data.data
+    self.joint_1_pub.publish(self.joint1.data)
+    self.joint_3_pub.publish(self.joint3.data)
+    self.joint_4_pub.publish(self.joint4.data)
 
   def callback_end_effector(self,red_centre):
     self.end_effector_pos = red_centre.data
-    
-    #calculate forward kinematics and publish
-    self.forward_kin_calc = self.forward_kinematics()
-    print(f"End-effector position: {self.end_effector_pos}")
-    print(f"End effector position calculate by FK: {self.forward_kin_calc}")
-
-    
 
 # call the class
 def main(args):
-  ic = image_converter()
+  c = control()
   try:
     rospy.spin()
   except KeyboardInterrupt:
