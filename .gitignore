@@ -1,3 +1,9 @@
 catkin_ws/.catkin_workspace
 catkin_ws/build/*
 catkin_ws/devel/*
+.DS_Store
+catkin_ws/.DS_Store
+catkin_ws/src/.DS_Store
+catkin_ws/src/ivr_assignment-master/.DS_Store
+catkin_ws/src/ivr_assignment-master/src/.DS_Store
+.DS_Store
