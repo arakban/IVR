@@ -74,8 +74,8 @@ class control:
     s1, c1, s3, c3, s4, c4 = np.sin(j1), np.cos(j1), np.sin(j3), np.cos(j3), np.sin(j4), np.cos(j4)
     
     #calculate the effect of rotation on each componenet 
-    x = 2.8 * (c1 * s3 * s4)  + 2.8 * (s1 * s4) + 3.2 * (c1 * s3)
-    y = 2.8 * (s1 * s3 * c3) - 2.8 * (s1*s3) + 3.2 * (s1 * s3) 
+    x = 2.8 * (c1 * s3 * c4)  + 2.8 * (c1 * s4) + 3.2 * (s1 * s3)
+    y = 2.8 * (c1 * s3 * c4) - 2.8 * (s1*s4) + 3.2 * (c1 * s3) 
     z = 2.8 * (c3 * c4) + 3.2 * (c3) + 4
     end_effector = np.array([x,y,z])
     
@@ -90,17 +90,17 @@ class control:
     #initialise a empty matrix with dimensions 
     jacob_matrix = np.zeros(shape=(3,3))
     
-    jacob_matrix[0,0] = 2.8 * (s1 * s3 * c4) - 2.8 * (c1 * s4) - 3.2 * (s1 * s3)                       #RX1
-    jacob_matrix[0,1] = 2.8 * (-s1 * c1 * s3)                                                          #RX3
-    jacob_matrix[0,2] = 2.8 * (-c1 * s3) - 2.8 * (s1 * s3 * c3)                                        #RX4
+    jacob_matrix[0,0] = 2.8 * (s1 * s3 * c4) - 2.8 * (s1 * s4) - 3.2 * (s1 * s3)                       #RX1
+    jacob_matrix[0,1] = 2.8 * (s1 * c1 * s3) + 3.2 (s1 * s3)                                           #RX3
+    jacob_matrix[0,2] = 2.8 * (c1 * c4) - 2.8 * (s1 * s3 * s4)                                         #RX4
 
-    jacob_matrix[1,0] = 2.8 * (c1 * s3 * c4) - 2.8 * (-s1 * s4) + 3.2 * (c1 * s3)                      #RY1
+    jacob_matrix[1,0] = 2.8 * (s1 * s3 * c4) + 2.8 * (c1 * s4) + 3.2 * (s1 * s3)                       #RY1
     jacob_matrix[1,1] = 2.8 * (s1 * c3 * c4) - 2.8 * (c1 * s4) + 3.2 * (s1 * c3)                       #RY3
     jacob_matrix[1,2] = 2.8 * (s1 * s3 * s4) - 2.8 * (c1 * c4) + 3.2 * (s1 * s3)                       #RY4
 
-    jacob_matrix[2,0] = 2.8 * (c3 * c4) + 3.2 * c3  + 4                                                #RZ1
-    jacob_matrix[2,1] = 2.8 * (-s4 * c4) - 3.2 * s3 + 4                                                #RZ3
-    jacob_matrix[2,2] = 2.8 * (c3 * -s4) + 3.2 * c3 + 4                                                #RZ4
+    jacob_matrix[2,0] = 2.8 * (c3 * c4) + 3.2 * c3                                                     #RZ1
+    jacob_matrix[2,1] = 2.8 * (-s3 * c4) - 3.2 * s3                                                    #RZ3
+    jacob_matrix[2,2] = 2.8 * (c3 * s4) + 3.2 * c3                                                     #RZ4
 
     return jacob_matrix
 
@@ -130,7 +130,7 @@ class control:
     joints_delta = np.dot(J_inv,self.error_d.T) * dt
 
     #new joint angles
-    new_joint_angles  = self.joint_angles + joints_delta
+    new_joint_angles = self.joint_angles + joints_delta
 
     return new_joint_angles
 
@@ -153,7 +153,7 @@ class control:
       print(e)
 
     #publish end-efector estimated by the images 
-    self.end_effector_pos = red_centre.data
+    self.end_effector_pos.data = red_centre.data
     self.end_effector_pub.publish(self.end_effector_pos)
     
     # #make robot move towards target using a control loop
