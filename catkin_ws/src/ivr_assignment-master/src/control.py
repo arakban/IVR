@@ -14,12 +14,11 @@ from cv_bridge import CvBridge, CvBridgeError
 
 
 class control:
-
   # Defines publisher and subscriber
   def __init__(self):
     #initialize the node named controller
-    rospy.init_node('controller', anonymous=True)
-    rate = rospy.Rate(50)  # 50hz
+    rospy.init_node('control', anonymous=True)
+    #rate = rospy.Rate(50)  # 50hz
     #bridge between openCV and ROS
     self.bridge = CvBridge()
     
@@ -42,12 +41,12 @@ class control:
 
     #target position
     self.target = Float64MultiArray()
-    self.target_sub = message_filters.Subscriber("/target_pos", Float64MultiArray)
+    #self.target_sub = message_filters.Subscriber("/target_pos", Float64MultiArray)
 
     #end effector - we don't care about orientation
     self.end_effector_pos = Float64MultiArray()
-    self.end_effector_sub = message_filters.Subscriber("red_centre", Float64MultiArray)
-    self.end_effector_pub = rospy.Publisher("/robot/joint4_position_controller/command", Float64, queue_size=10)
+    self.end_effector_sub = message_filters.Subscriber("red_center", Float64MultiArray)
+    self.end_effector_pub = rospy.Publisher("/robot/joint4_position_controller/command", Float64MultiArray, queue_size=10)
 
     #forward kinematics calculation publisher
     self.forward_kin_calc = Float64MultiArray()
@@ -60,8 +59,8 @@ class control:
 
     self.time_previous_step = rospy.get_time()
 
-    #synchronise topics
-    self.ts = message_filters.ApproximateTimeSynchronizer([self.joint1_sub, self.joint3_su, self.joint4_sub, self.target_sub, self.end_effector_sub],
+    #synchronise topics, at 50 HZ
+    self.ts = message_filters.ApproximateTimeSynchronizer([self.joint1_sub, self.joint3_sub, self.joint4_sub, self.end_effector_sub],
                                                             queue_size=10, slop=0.02, allow_headerless=True)
     self.ts.registerCallback(self.callback)
 
@@ -136,7 +135,7 @@ class control:
     return new_joint_angles
 
   # Receive data from joint1 
-  def callback(self,joint1,joint3,joint4,target_data,red_centre):
+  def callback(self,joint1,joint3,joint4,red_centre):
     #update 1st joint
     self.joint_angles[0] = joint1.data
 
@@ -147,32 +146,33 @@ class control:
     self.joint_angles[2] = joint4.data
 
     #calculate forward kinematics to get the estimation of joint states and publish
-    self.forward_kin_calc = self.forward_kinematics()
+    self.forward_kin_calc.data = self.forward_kinematics()
     try:
       self.forward_kin_pub.publish(self.forward_kin_calc)
     except CvBridgeError as e:
       print(e)
 
     #publish end-efector estimated by the images 
+    self.end_effector_pos = red_centre.data
     self.end_effector_pub.publish(self.end_effector_pos)
     
-    #make robot move towards target using a control loop
-    self.target = target_data.data
-    #now calculate new joint angles
-    new_joint_angles = self.control_open()
+    # #make robot move towards target using a control loop
+    # self.target = target_data.data
+    # #now calculate new joint angles
+    # new_joint_angles = self.control_open()
 
-    #publish new joint angles
-    self.joint1 = new_joint_angles[0]
-    self.joint3 = new_joint_angles[1]
-    self.joint4 = new_joint_angles[2]
-    try: 
-      self.joint_1_pub.publish(self.joint1)
-      self.joint_3_pub.publish(self.joint3)
-      self.joint_4_pub.publish(self.joint4)
-    except CvBridgeError as e:
-      print(e)
+    # #publish new joint angles
+    # self.joint1 = new_joint_angles[0]
+    # self.joint3 = new_joint_angles[1]
+    # self.joint4 = new_joint_angles[2]
+    # try: 
+    #   self.joint_1_pub.publish(self.joint1)
+    #   self.joint_3_pub.publish(self.joint3)
+    #   self.joint_4_pub.publish(self.joint4)
+    # except CvBridgeError as e:
+    #   print(e)
 
-    self.end_effector_pos = red_centre.data
+    # self.end_effector_pos = red_centre.data
 
 # call the class
 def main(args):
