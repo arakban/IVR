@@ -8,7 +8,7 @@ import numpy as np
 import logging 
 import message_filters
 from std_msgs.msg import String
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, JointState
 from std_msgs.msg import Float64, Float64MultiArray
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -18,11 +18,12 @@ class control:
   def __init__(self):
     #initialize the node named controller
     rospy.init_node('control', anonymous=True)
-    #rate = rospy.Rate(50)  # 50hz
+    global rate 
+    rate = rospy.Rate(50)  # 50hz
     
     #bridge between openCV and ROS
     self.bridge = CvBridge()
-    
+
     #initialize subscribers to get joints' angular position to the robot
     self.joint1_sub = message_filters.Subscriber("joint_angle_1", Float64, queue_size=1)
     self.joint3_sub = message_filters.Subscriber("joint_angle_3", Float64, queue_size=1)
@@ -37,10 +38,10 @@ class control:
     self.red_center_sub = message_filters.Subscriber("red_center", Float64MultiArray, queue_size=1)
     self.end_effector_sub = message_filters.Subscriber("red_center", Float64MultiArray, queue_size=10)
 
-    #synchronise topics for FK, listen to updates every 3 seconds as this how long 
-    self.joint_sync = message_filters.ApproximateTimeSynchronizer([self.joint1_sub, self.joint3_sub, self.joint4_sub, self.red_center_sub],
-                                                            queue_size=1, slop=3, allow_headerless=True)
-    self.joint_sync.registerCallback(self.callback_fk)
+    # #synchronise topics for FK, listen to updates every 3 seconds as this how long 
+    # self.joint_sync = message_filters.ApproximateTimeSynchronizer([self.joint1_sub, self.joint3_sub, self.joint4_sub, self.red_center_sub],
+    #                                                         queue_size=1, slop= 3, allow_headerless=True)
+    # self.joint_sync.registerCallback(self.callback_fk)
 
     #array to store joint data
     self.joint_angles = np.array([0.0,0.0,0.0])
@@ -142,7 +143,7 @@ class control:
     return new_joint_angles
 
   # Receive data from joint1 
-  def callback_fk(self,joint1,joint3,joint4,red_centre):
+  def callback_fk(self,joint1,joint3,joint4,red_center):
     #update 1st joint
     self.joint_angles[0] = joint1.data
 
@@ -154,23 +155,24 @@ class control:
 
     #calculate forward kinematics to get the estimation of joint states and publish
     self.fk_calc.data = self.forward_kinematics()
-    self.fk_error.data = self.fk_calc.data - self.red_center.data
+    self.fk_error.data = self.fk_calc.data - red_center.data
 
     try:
       self.fk_pub.publish(self.fk_calc)
       self.fk_error_pub.publish(self.fk_error)
       #show end-effector estimated by the images
-      print(f"End effector from vison2: {red_centre.data}")
+      print(f"End effector from vison2: {red_center.data}")
       #show FK estimattion
       print(f"FK pred: {self.fk_calc.data}")
       #show error
       print(f"error in FK: {self.fk_error.data}")
+      rate.sleep()
     except CvBridgeError as e:
       print(e)
     
   def callback_ik(self,target_data,end_effector):
     #calculate new joint angles
-    new_joint_angles = self.control_open(target_data,end_effector)
+    new_joint_angles = self.control_open(np.array(target_data.data),np.array(end_effector.data))
 
     #publish new joint angles
     self.joint1 = new_joint_angles[0]
