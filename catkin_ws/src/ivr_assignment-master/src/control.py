@@ -46,22 +46,23 @@ class control:
     #end effector - we don't care about orientation
     self.end_effector_pos = Float64MultiArray()
     self.end_effector_sub = message_filters.Subscriber("red_center", Float64MultiArray)
-    self.end_effector_pub = rospy.Publisher("/robot/joint4_position_controller/command", Float64MultiArray, queue_size=10)
 
-    #forward kinematics calculation publisher
+    #forward kinematics for end-effector calculation publisher
     self.forward_kin_calc = Float64MultiArray()
+    self.forward_kin_error = Float64MultiArray()
     self.forward_kin_pub = rospy.Publisher("fk_end_effector", Float64MultiArray, queue_size=10)
+    self.forward_kin_error_pub = rospy.Publisher("fk_error", Float64MultiArray, queue_size=10)
     
     #error data and pub
     self.error = np.array([0.0,0.0,0.0,0.0], dtype='float64')
     self.error_d = np.array([0.0,0.0,0.0,0.0], dtype='float64')
-    #self.error_pub = rospy.Publisher("error", Float64MultiArray, queue_size=10)
+    self.fk_error_pub = rospy.Publisher("error", Float64MultiArray, queue_size=10)
 
     self.time_previous_step = rospy.get_time()
 
     #synchronise topics, at 50 HZ
     self.ts = message_filters.ApproximateTimeSynchronizer([self.joint1_sub, self.joint3_sub, self.joint4_sub, self.end_effector_sub],
-                                                            queue_size=10, slop=0.02, allow_headerless=True)
+                                                            queue_size=10, slop=3, allow_headerless=True)
     self.ts.registerCallback(self.callback)
 
   
@@ -91,7 +92,7 @@ class control:
     jacob_matrix = np.zeros(shape=(3,3))
     
     jacob_matrix[0,0] = 2.8 * (s1 * s3 * c4) - 2.8 * (s1 * s4) - 3.2 * (s1 * s3)                       #RX1
-    jacob_matrix[0,1] = 2.8 * (s1 * c1 * s3) + 3.2 (s1 * s3)                                           #RX3
+    jacob_matrix[0,1] = 2.8 * (s1 * c1 * s3) + 3.2 * (s1 * s3)                                         #RX3
     jacob_matrix[0,2] = 2.8 * (c1 * c4) - 2.8 * (s1 * s3 * s4)                                         #RX4
 
     jacob_matrix[1,0] = 2.8 * (s1 * s3 * c4) + 2.8 * (c1 * s4) + 3.2 * (s1 * s3)                       #RY1
@@ -147,14 +148,17 @@ class control:
 
     #calculate forward kinematics to get the estimation of joint states and publish
     self.forward_kin_calc.data = self.forward_kinematics()
+    #get end-effector estimated by the images 
+    self.end_effector_pos.data = red_centre.data
+    self.forward_kin_error.data = self.forward_kin_calc.data - self.end_effector_pos.data
     try:
       self.forward_kin_pub.publish(self.forward_kin_calc)
+      self.forward_kin_error_pub.publish(self.forward_kin_error)
+      print(f"End effector from vison2: {self.end_effector_pos.data}")
+      print(f"FK pred: {self.forward_kin_calc.data}")
+      print(f"error in FK: {self.forward_kin_error.data}")
     except CvBridgeError as e:
       print(e)
-
-    #publish end-efector estimated by the images 
-    self.end_effector_pos.data = red_centre.data
-    self.end_effector_pub.publish(self.end_effector_pos)
     
     # #make robot move towards target using a control loop
     # self.target = target_data.data
